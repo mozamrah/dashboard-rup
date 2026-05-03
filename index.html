@@ -53,8 +53,7 @@
 
         <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
             <div>
-                <h2 class="text-2xl font-bold text-gray-800">Ringkasan Eksekutif</h2>
-                <p class="text-sm text-gray-500">Perbandingan Perancangan vs Pelaksanaan Sebenar (Tahun Semasa)</p>
+                <h2 class="text-2xl font-bold text-gray-800">Laporan Pelaksanaan Latihan RUP Agensi</h2>
             </div>
             <div class="flex flex-wrap gap-2">
                 <!-- Saringan Julat Bulan -->
@@ -151,7 +150,14 @@
         <!-- Charts Section -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
             <div class="glass-card p-6">
-                <h3 class="text-lg font-bold text-gray-800 mb-4">Trend Pelaksanaan vs Perancangan (Peserta)</h3>
+                <div class="flex justify-between items-start mb-4">
+                    <h3 class="text-lg font-bold text-gray-800">Pelaksanaan vs Perancangan</h3>
+                    <select id="monthlyChartMetric" class="bg-gray-50 border border-gray-300 text-gray-700 py-1 px-2 rounded shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs cursor-pointer">
+                        <option value="kursus">Bil Kursus</option>
+                        <option value="peserta" selected>Bil Peserta</option>
+                        <option value="kos">Kos (RM)</option>
+                    </select>
+                </div>
                 <div class="relative h-72 w-full"><canvas id="monthlyChart"></canvas></div>
             </div>
             <div class="glass-card p-6">
@@ -194,7 +200,7 @@
                             <div>Sep</div><div>Okt</div><div>Nov</div><div>Dis</div>
                         </div>
                     </div>
-                    <div id="gantt-body" class="space-y-2">
+                    <div id="gantt-body" class="space-y-2 pb-24">
                         <div class="animate-pulse flex space-x-4">
                             <div class="h-4 bg-gray-200 rounded w-1/4"></div>
                             <div class="flex-1 space-y-4 py-1"><div class="h-4 bg-gray-200 rounded"></div></div>
@@ -473,10 +479,14 @@
             let rData = new Array(12).fill(0);
             let sData = new Array(12).fill(0);
 
+            const metric = document.getElementById('monthlyChartMetric').value;
+            const isKos = metric === 'kos';
+
             data.forEach(d => {
                 if(d.bulan >= 1 && d.bulan <= 12) {
-                    rData[d.bulan - 1] += d.rPeserta;
-                    sData[d.bulan - 1] += d.sPeserta;
+                    if (metric === 'kursus') { rData[d.bulan - 1] += d.rKursus; sData[d.bulan - 1] += d.sKursus; }
+                    else if (metric === 'peserta') { rData[d.bulan - 1] += d.rPeserta; sData[d.bulan - 1] += d.sPeserta; }
+                    else if (metric === 'kos') { rData[d.bulan - 1] += d.rKos; sData[d.bulan - 1] += d.sKos; }
                 }
             });
 
@@ -492,7 +502,34 @@
                         { label: 'Pelaksanaan Sebenar', data: sData, backgroundColor: 'rgba(59, 130, 246, 0.8)', borderRadius: 4 }
                     ]
                 },
-                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' } } }
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false, 
+                    plugins: { 
+                        legend: { position: 'top' },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) label += ': ';
+                                    if (context.parsed.y !== null) {
+                                        label += isKos ? formatRM(context.parsed.y) : formatNumber(context.parsed.y);
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            ticks: {
+                                callback: function(value) {
+                                    return isKos ? 'RM ' + formatShortNum(value) : formatShortNum(value);
+                                }
+                            }
+                        }
+                    }
+                }
             });
         }
 
@@ -544,7 +581,10 @@
                             }
                         }
                     }, 
-                    scales: { x: { suggestedMax: 100, title: { display: true, text: 'Peratusan Siap (%)' } } } 
+                    scales: { 
+                        y: { ticks: { autoSkip: false } }, // Pastikan semua label agensi sentiasa dipaparkan
+                        x: { suggestedMax: 100, title: { display: true, text: 'Peratusan Siap (%)' } } 
+                    } 
                 }
             });
         }
@@ -591,23 +631,59 @@
                         
                         let bgClassP = "bg-gray-200 text-gray-600"; 
                         let bgClassS = "bg-gray-100 text-gray-400"; 
+                        let tooltipColor = "text-gray-400";
 
                         if (rVal > 0 && sVal === 0) {
-                            bgClassS = "bg-red-400 text-white"; 
+                            bgClassS = "bg-red-500 text-white"; 
+                            tooltipColor = "text-red-400";
                         } else if (rVal > 0 && sVal > 0) {
                             let ratio = sVal / rVal;
-                            bgClassS = ratio >= 1 ? "bg-green-500 text-white" : ratio >= 0.5 ? "bg-yellow-400 text-gray-800" : "bg-orange-400 text-white";
+                            if (ratio >= 0.75) {
+                                bgClassS = "bg-green-500 text-white";
+                                tooltipColor = "text-green-400";
+                            } else if (ratio >= 0.50) {
+                                bgClassS = "bg-yellow-400 text-gray-800";
+                                tooltipColor = "text-yellow-400";
+                            } else if (ratio >= 0.25) {
+                                bgClassS = "bg-orange-400 text-white";
+                                tooltipColor = "text-orange-400";
+                            } else {
+                                bgClassS = "bg-red-500 text-white";
+                                tooltipColor = "text-red-400";
+                            }
                         } else if (rVal === 0 && sVal > 0) {
                             bgClassS = "bg-blue-400 text-white"; 
                             bgClassP = "bg-gray-100 text-gray-400";
+                            tooltipColor = "text-blue-400";
                         }
 
-                        let tooltipStr = `Rancang: ${isKos ? formatRM(rVal) : formatNumber(rVal)} \nSebenar: ${isKos ? formatRM(sVal) : formatNumber(sVal)}`;
+                        let pFormat = isKos ? formatRM(rVal) : formatNumber(rVal);
+                        let sFormat = isKos ? formatRM(sVal) : formatNumber(sVal);
+                        let pctFormat = rVal > 0 ? Math.round((sVal / rVal) * 100) + '%' : (sVal > 0 ? 'Ad-Hoc (Tiada Plan)' : '0%');
 
                         htmlRow += `
-                        <div class="flex flex-col h-full rounded shadow-sm overflow-hidden" title="${tooltipStr}">
-                            <div class="${bgClassP} h-1/2 flex items-center justify-center text-[10px] font-medium border-b border-white/40">P: ${pText}</div>
-                            <div class="${bgClassS} h-1/2 flex items-center justify-center text-[10px] font-bold tracking-tight">S: ${sText}</div>
+                        <div class="group relative flex flex-col h-full rounded shadow-sm cursor-pointer hover:z-50">
+                            <div class="${bgClassP} h-1/2 flex items-center justify-center text-[10px] font-medium border-b border-white/40 rounded-t">P: ${pText}</div>
+                            <div class="${bgClassS} h-1/2 flex items-center justify-center text-[10px] font-bold tracking-tight rounded-b">S: ${sText}</div>
+                            
+                            <!-- Custom Tooltip Interaktif -->
+                            <div class="hidden group-hover:block absolute top-full left-1/2 transform -translate-x-1/2 mt-1.5 w-max min-w-[160px] bg-gray-900 text-white text-xs p-3 rounded-lg shadow-2xl pointer-events-none">
+                                <div class="font-bold text-gray-100 border-b border-gray-700 pb-1.5 mb-2 text-center">${ag} - Bulan ${i}</div>
+                                <div class="flex justify-between gap-4 mb-1">
+                                    <span class="text-gray-400">Rancang:</span> 
+                                    <span class="font-medium text-white">${pFormat}</span>
+                                </div>
+                                <div class="flex justify-between gap-4 mb-1">
+                                    <span class="text-gray-400">Sebenar:</span> 
+                                    <span class="font-bold ${tooltipColor}">${sFormat}</span>
+                                </div>
+                                <div class="flex justify-between gap-4 mt-2 pt-2 border-t border-gray-700">
+                                    <span class="text-gray-400">Pencapaian:</span> 
+                                    <span class="font-bold text-white">${pctFormat}</span>
+                                </div>
+                                <!-- Penunjuk Segitiga -->
+                                <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 -mb-px border-[6px] border-transparent border-b-gray-900"></div>
+                            </div>
                         </div>`;
                     } else {
                         htmlRow += `<div class="bg-transparent h-full"></div>`;
@@ -624,6 +700,7 @@
             document.getElementById('monthEnd').addEventListener('change', processData);
             document.getElementById('ganttMetric').addEventListener('change', processData);
             document.getElementById('agencyChartMetric').addEventListener('change', processData);
+            document.getElementById('monthlyChartMetric').addEventListener('change', processData);
             loadData();
         };
 
